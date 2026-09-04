@@ -1,6 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning, Christian';
+  if (hour < 18) return 'Good afternoon, Christian';
+  return 'Good evening, Christian';
+}
+
 export default function Home() {
   const [tab, setTab] = useState('chat');
   const [messages, setMessages] = useState([]);
@@ -56,7 +63,7 @@ export default function Home() {
 
         <h1 className="text-lg font-medium mb-4 flex items-center gap-2 flex-shrink-0">
           <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-300 text-sm font-medium">D</span>
-          Deos
+          {greeting()}
         </h1>
 
         {tab === 'chat' && (
