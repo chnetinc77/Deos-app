@@ -89,7 +89,7 @@ export default function Home() {
 
             <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-lg p-2 flex-shrink-0">
               <input
-                className="flex-1 min-w-0 bg-transparent outline-none text-sm px-2"
+                className="flex-1 min-w-0 bg-transparent outline-none text-base px-2"
                 placeholder="Ask Deos anything"
                 value={input}
                 onChange={e => setInput(e.target.value)}
