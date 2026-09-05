@@ -19,6 +19,9 @@ export default function Home() {
   const [newQuestion, setNewQuestion] = useState('');
   const [newOptions, setNewOptions] = useState('');
   const [outcomeDrafts, setOutcomeDrafts] = useState({});
+  const [conversations, setConversations] = useState([]);
+  const [conversationId, setConversationId] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -81,7 +84,35 @@ export default function Home() {
     } catch (err) {}
   };
 
-  useEffect(() => { loadFacts(); loadDecisions(); }, []);
+  const loadConversations = async () => {
+    try {
+      const res = await fetch(`${API}/api/conversations`);
+      const data = await res.json();
+      setConversations(data);
+    } catch (err) {
+      setConversations([]);
+    }
+  };
+
+  const openConversation = async (id) => {
+    try {
+      const res = await fetch(`${API}/api/conversations/${id}/messages`);
+      const data = await res.json();
+      setMessages(data.map(m => ({ role: m.role, text: m.content })));
+      setConversationId(id);
+      setSidebarOpen(false);
+      setTab('chat');
+    } catch (err) {}
+  };
+
+  const startNewChat = () => {
+    setMessages([]);
+    setConversationId(null);
+    setSidebarOpen(false);
+    setTab('chat');
+  };
+
+  useEffect(() => { loadFacts(); loadDecisions(); loadConversations(); }, []);
 
   const send = async () => {
     if (!input.trim()) return;
@@ -93,11 +124,13 @@ export default function Home() {
       const res = await fetch(`${API}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMsg.text })
+        body: JSON.stringify({ message: userMsg.text, conversationId })
       });
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'assistant', text: data.reply || data.error || 'No reply.' }]);
+      if (data.conversationId) setConversationId(data.conversationId);
       loadFacts();
+      loadConversations();
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', text: 'Error reaching Deos backend.' }]);
     }
@@ -115,10 +148,45 @@ export default function Home() {
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center py-6 px-4">
       <div className="w-full max-w-md flex flex-col h-[100dvh] max-h-[100dvh] pb-4">
 
-        <h1 className="text-lg font-medium mb-4 flex items-center gap-2 flex-shrink-0">
-          <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-300 text-sm font-medium">D</span>
-          {greeting()}
-        </h1>
+        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="w-8 h-8 flex items-center justify-center text-neutral-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 className="text-lg font-medium flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-300 text-sm font-medium">D</span>
+            {greeting()}
+          </h1>
+          <button onClick={startNewChat} className="w-8 h-8 flex items-center justify-center text-neutral-400">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        {sidebarOpen && (
+          <div className="fixed inset-0 z-50 flex">
+            <div className="w-72 bg-neutral-900 border-r border-neutral-800 h-full overflow-y-auto p-3">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">Conversations</span>
+                <button onClick={() => setSidebarOpen(false)} className="text-neutral-500 text-sm">✕</button>
+              </div>
+              <button onClick={startNewChat} className="w-full text-left text-sm px-3 py-2 rounded-lg bg-indigo-500/20 text-indigo-300 mb-3">
+                + New chat
+              </button>
+              <div className="flex flex-col gap-1">
+                {conversations.length === 0 && <p className="text-xs text-neutral-600 px-3">No conversations yet</p>}
+                {conversations.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => openConversation(c.id)}
+                    className={`text-left text-sm px-3 py-2 rounded-lg truncate ${c.id === conversationId ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-400'}`}
+                  >
+                    {c.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)}></div>
+          </div>
+        )}
 
         {tab === 'chat' && (
           <>
