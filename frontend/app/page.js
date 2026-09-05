@@ -137,6 +137,18 @@ export default function Home() {
     setLoading(false);
   };
 
+  const pushToAiOnIt = async (title, domain) => {
+    try {
+      const res = await fetch(`${API}/api/push-to-ai-on-it`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, domain })
+      });
+      const data = await res.json();
+      if (data.ok) alert('Sent to AI ON IT');
+    } catch (err) {}
+  };
+
   const deleteFact = async (id) => {
     try {
       await fetch(`${API}/api/facts/${id}`, { method: 'DELETE' });
@@ -245,7 +257,10 @@ export default function Home() {
                   <p className="text-sm">{f.content}</p>
                   <p className="text-xs text-neutral-500 mt-0.5">{f.category} · {Math.round(f.confidence * 100)}% confidence</p>
                 </div>
-                <button onClick={() => deleteFact(f.id)} className="text-neutral-600 text-xs px-2">✕</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => pushToAiOnIt(f.content, f.domain)} className="text-indigo-400 text-xs px-2 whitespace-nowrap">→ AI ON IT</button>
+                  <button onClick={() => deleteFact(f.id)} className="text-neutral-600 text-xs px-2">✕</button>
+                </div>
               </div>
             ))}
           </div>
