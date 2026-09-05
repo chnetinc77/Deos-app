@@ -107,7 +107,7 @@ app.post('/api/chat', async (req, res) => {
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: [
         {
           type: 'text',
@@ -123,7 +123,7 @@ app.post('/api/chat', async (req, res) => {
 
     const textBlock = response.content.find(b => b.type === 'text');
     const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'record_facts');
-    const replyText = textBlock ? textBlock.text : '';
+    const replyText = textBlock && textBlock.text ? textBlock.text : "Got it — noted.";
 
     let convId = conversationId;
     if (!convId) {
