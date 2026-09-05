@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.prose-chat p { margin-bottom: 0.5rem; }
+.prose-chat p:last-child { margin-bottom: 0; }
+.prose-chat strong { font-weight: 600; color: inherit; }
+.prose-chat ul, .prose-chat ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+.prose-chat ul { list-style-type: disc; }
+.prose-chat ol { list-style-type: decimal; }
+.prose-chat li { margin-bottom: 0.25rem; }
+.prose-chat li:last-child { margin-bottom: 0; }

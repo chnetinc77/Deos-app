@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -141,7 +142,11 @@ export default function Home() {
                     ? 'self-end bg-indigo-500/20 text-indigo-100 rounded-br-sm'
                     : 'self-start bg-neutral-900 border border-neutral-800 rounded-bl-sm'
                 }`}>
-                  {m.text}
+                  {m.role === 'assistant' ? (
+                    <div className="prose-chat">
+                      <ReactMarkdown>{m.text}</ReactMarkdown>
+                    </div>
+                  ) : m.text}
                 </div>
               ))}
               {loading && <div className="self-start text-neutral-500 text-sm">Deos is thinking...</div>}
