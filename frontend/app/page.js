@@ -94,7 +94,7 @@ export default function Home() {
               {loading && <div className="self-start text-neutral-500 text-sm">Deos is thinking...</div>}
             </div>
 
-            <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-lg p-2 flex-shrink-0" style={{ marginBottom: 'env(safe-area-inset-bottom)' }}>
+            <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-800 rounded-lg p-2 flex-shrink-0">
               <input
                 className="flex-1 min-w-0 bg-transparent outline-none text-base px-2"
                 placeholder="Ask Deos anything"
@@ -131,7 +131,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="flex justify-around pt-3 mt-3 border-t border-neutral-800 flex-shrink-0">
+        <div className="flex justify-around pt-3 mt-3 border-t border-neutral-800 flex-shrink-0" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}>
           <button onClick={() => setTab('chat')} className={`flex flex-col items-center gap-1 text-xs ${tab === 'chat' ? 'text-indigo-400' : 'text-neutral-500'}`}>
             <span>Chat</span>
           </button>
