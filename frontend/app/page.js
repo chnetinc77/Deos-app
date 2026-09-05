@@ -14,6 +14,10 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [facts, setFacts] = useState([]);
+  const [decisions, setDecisions] = useState([]);
+  const [newQuestion, setNewQuestion] = useState('');
+  const [newOptions, setNewOptions] = useState('');
+  const [outcomeDrafts, setOutcomeDrafts] = useState({});
 
   const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -27,7 +31,56 @@ export default function Home() {
     }
   };
 
-  useEffect(() => { loadFacts(); }, []);
+  const loadDecisions = async () => {
+    try {
+      const res = await fetch(`${API}/api/decisions`);
+      const data = await res.json();
+      setDecisions(data);
+    } catch (err) {
+      setDecisions([]);
+    }
+  };
+
+  const createDecision = async () => {
+    if (!newQuestion.trim() || !newOptions.trim()) return;
+    const options = newOptions.split(',').map(o => o.trim()).filter(Boolean);
+    try {
+      await fetch(`${API}/api/decisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: newQuestion, options })
+      });
+      setNewQuestion('');
+      setNewOptions('');
+      loadDecisions();
+    } catch (err) {}
+  };
+
+  const chooseOption = async (id, chosen) => {
+    try {
+      await fetch(`${API}/api/decisions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chosen })
+      });
+      loadDecisions();
+    } catch (err) {}
+  };
+
+  const reportOutcome = async (id) => {
+    const outcome_notes = outcomeDrafts[id];
+    if (!outcome_notes || !outcome_notes.trim()) return;
+    try {
+      await fetch(`${API}/api/decisions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome_notes })
+      });
+      loadDecisions();
+    } catch (err) {}
+  };
+
+  useEffect(() => { loadFacts(); loadDecisions(); }, []);
 
   const send = async () => {
     if (!input.trim()) return;
@@ -126,8 +179,68 @@ export default function Home() {
         )}
 
         {tab === 'decisions' && (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-sm text-neutral-500">Decisions log — coming next.</p>
+          <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
+            <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+              <input
+                className="w-full bg-transparent outline-none text-sm mb-2 placeholder-neutral-600"
+                placeholder="What are you deciding?"
+                value={newQuestion}
+                onChange={e => setNewQuestion(e.target.value)}
+              />
+              <input
+                className="w-full bg-transparent outline-none text-sm mb-2 placeholder-neutral-600"
+                placeholder="Options, comma separated"
+                value={newOptions}
+                onChange={e => setNewOptions(e.target.value)}
+              />
+              <button
+                onClick={createDecision}
+                className="text-xs px-3 py-1.5 rounded-md bg-indigo-500/20 text-indigo-300"
+              >Log decision</button>
+            </div>
+
+            {decisions.length === 0 && <p className="text-sm text-neutral-500">No decisions logged yet.</p>}
+
+            {decisions.map(d => (
+              <div key={d.id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-3">
+                <p className="text-sm mb-2">{d.question}</p>
+
+                {!d.chosen && (
+                  <div className="flex gap-2 flex-wrap">
+                    {(typeof d.options === 'string' ? JSON.parse(d.options) : d.options).map((opt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => chooseOption(d.id, opt)}
+                        className="text-xs px-3 py-1.5 rounded-md bg-neutral-800 border border-neutral-700 text-neutral-300"
+                      >{opt}</button>
+                    ))}
+                  </div>
+                )}
+
+                {d.chosen && !d.outcome_notes && (
+                  <div>
+                    <p className="text-xs text-indigo-400 mb-2">Chose: {d.chosen}</p>
+                    <input
+                      className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-2 py-1.5 text-sm outline-none mb-2 placeholder-neutral-600"
+                      placeholder="How did it go?"
+                      value={outcomeDrafts[d.id] || ''}
+                      onChange={e => setOutcomeDrafts(prev => ({ ...prev, [d.id]: e.target.value }))}
+                    />
+                    <button
+                      onClick={() => reportOutcome(d.id)}
+                      className="text-xs px-3 py-1.5 rounded-md bg-indigo-500/20 text-indigo-300"
+                    >Save outcome</button>
+                  </div>
+                )}
+
+                {d.chosen && d.outcome_notes && (
+                  <div>
+                    <p className="text-xs text-indigo-400">Chose: {d.chosen}</p>
+                    <p className="text-xs text-neutral-500 mt-1">Outcome: {d.outcome_notes}</p>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
