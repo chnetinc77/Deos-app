@@ -107,7 +107,7 @@ app.post('/api/chat', async (req, res) => {
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: [
         {
           type: 'text',
@@ -123,9 +123,9 @@ You have web search available. For any decision involving money, business, inves
       tools: [FACT_TOOL, { type: 'web_search_20250305', name: 'web_search' }]
     });
 
-    const textBlock = response.content.find(b => b.type === 'text');
+    const textBlocks = response.content.filter(b => b.type === 'text');
     const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'record_facts');
-    const replyText = textBlock && textBlock.text ? textBlock.text : "Got it — noted.";
+    const replyText = textBlocks.length > 0 ? textBlocks.map(b => b.text).join('\n\n') : "Got it — noted.";
 
     let convId = conversationId;
     if (!convId) {
