@@ -23,6 +23,7 @@ const FACT_TOOL = {
           type: 'object',
           properties: {
             category: { type: 'string', enum: ['goal', 'value', 'pattern', 'constraint', 'preference'] },
+            domain: { type: 'string', enum: ['health', 'finance', 'network', 'career', 'general'], description: 'Which life area this fact belongs to' },
             content: { type: 'string' },
             confidence: { type: 'number' }
           },
@@ -36,12 +37,12 @@ const FACT_TOOL = {
 
 async function getSelfModel() {
   const { rows } = await pool.query(
-    `SELECT category, content, confidence FROM user_facts
+    `SELECT category, domain, content, confidence FROM user_facts
      WHERE superseded_by IS NULL AND confidence >= 0.5
      ORDER BY category, confidence DESC`
   );
   if (rows.length === 0) return 'No facts recorded yet.';
-  return rows.map(r => `[${r.category}] ${r.content} (confidence: ${r.confidence})`).join('\n');
+  return rows.map(r => `[${r.category}/${r.domain}] ${r.content} (confidence: ${r.confidence})`).join('\n');
 }
 
 async function getRecentEvents(limit = 10) {
@@ -52,9 +53,49 @@ async function getRecentEvents(limit = 10) {
   return rows.reverse();
 }
 
+app.post('/api/conversations', async (req, res) => {
+  try {
+    const { title } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO conversations (title) VALUES ($1) RETURNING *`,
+      [title || 'New conversation']
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/conversations', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, updated_at FROM conversations ORDER BY updated_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/conversations/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rows } = await pool.query(
+      `SELECT role, content, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, conversationId } = req.body;
     if (!message) return res.status(400).json({ error: 'message is required' });
 
     const selfModel = await getSelfModel();
@@ -70,7 +111,7 @@ app.post('/api/chat', async (req, res) => {
       system: [
         {
           type: 'text',
-          text: `You are Deos, a personal cognitive assistant that has been learning about this specific user over time. Use what you know about them to give grounded, specific responses that reference their actual history, goals, and patterns — not generic advice. Never make the decision for them; surface relevant context and let them decide.\n\nWhat you currently know about this user:\n${selfModel}`,
+          text: `You are Deos, a personal cognitive assistant that has been learning about this specific user over time. Use what you know about them to give grounded, specific responses that reference their actual history, goals, and patterns — not generic advice. Never make the decision for them; surface relevant context and let them decide. When recording facts, classify each one into a domain: health, finance, network (relationships/people), career, or general.\n\nWhat you currently know about this user:\n${selfModel}`,
           cache_control: { type: 'ephemeral' }
         }
       ],
@@ -84,6 +125,26 @@ app.post('/api/chat', async (req, res) => {
     const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'record_facts');
     const replyText = textBlock ? textBlock.text : '';
 
+    let convId = conversationId;
+    if (!convId) {
+      const title = message.length > 50 ? message.slice(0, 50) + '...' : message;
+      const convResult = await pool.query(
+        `INSERT INTO conversations (title) VALUES ($1) RETURNING id`,
+        [title]
+      );
+      convId = convResult.rows[0].id;
+    }
+
+    await pool.query(
+      `INSERT INTO messages (conversation_id, role, content) VALUES ($1, 'user', $2)`,
+      [convId, message]
+    );
+    await pool.query(
+      `INSERT INTO messages (conversation_id, role, content) VALUES ($1, 'assistant', $2)`,
+      [convId, replyText]
+    );
+    await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [convId]);
+
     const eventResult = await pool.query(
       `INSERT INTO events (event_type, raw_content) VALUES ('chat', $1) RETURNING id`,
       [message]
@@ -94,16 +155,16 @@ app.post('/api/chat', async (req, res) => {
     if (toolBlock && toolBlock.input.facts) {
       for (const fact of toolBlock.input.facts) {
         const { rows } = await pool.query(
-          `INSERT INTO user_facts (category, content, confidence, source_event_id)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [fact.category, fact.content, fact.confidence, eventId]
+          `INSERT INTO user_facts (category, content, confidence, source_event_id, domain)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+          [fact.category, fact.content, fact.confidence, eventId, fact.domain || 'general']
         );
         newFactIds.push(rows[0].id);
       }
       await pool.query(`UPDATE events SET extracted_fact_ids = $1 WHERE id = $2`, [newFactIds, eventId]);
     }
 
-    res.json({ reply: replyText, factsLearned: newFactIds.length });
+    res.json({ reply: replyText, factsLearned: newFactIds.length, conversationId: convId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal error' });
@@ -112,7 +173,7 @@ app.post('/api/chat', async (req, res) => {
 
 app.get('/api/facts', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, category, content, confidence, first_seen FROM user_facts
+    `SELECT id, category, domain, content, confidence, first_seen FROM user_facts
      WHERE superseded_by IS NULL ORDER BY category, confidence DESC`
   );
   res.json(rows);
