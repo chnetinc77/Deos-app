@@ -166,7 +166,8 @@ You have web search available. For any decision involving money, business, inves
       await pool.query(`UPDATE events SET extracted_fact_ids = $1 WHERE id = $2`, [newFactIds, eventId]);
     }
 
-    res.json({ reply: replyText, factsLearned: newFactIds.length, conversationId: convId });
+    const usedWebSearch = response.content.some(b => b.type === 'server_tool_use' || b.type === 'web_search_tool_result');
+    res.json({ reply: replyText, factsLearned: newFactIds.length, conversationId: convId, usedWebSearch });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal error' });
