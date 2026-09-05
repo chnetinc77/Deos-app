@@ -127,7 +127,7 @@ export default function Home() {
         body: JSON.stringify({ message: userMsg.text, conversationId })
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', text: data.reply || data.error || 'No reply.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', text: data.reply || data.error || 'No reply.', usedWebSearch: data.usedWebSearch, factsLearned: data.factsLearned }]);
       if (data.conversationId) setConversationId(data.conversationId);
       loadFacts();
       loadConversations();
@@ -223,9 +223,21 @@ export default function Home() {
                     : 'self-start bg-neutral-900 border border-neutral-800 rounded-bl-sm'
                 }`}>
                   {m.role === 'assistant' ? (
-                    <div className="prose-chat">
-                      <ReactMarkdown>{m.text}</ReactMarkdown>
-                    </div>
+                    <>
+                      {(m.usedWebSearch || m.factsLearned > 0) && (
+                        <div className="flex gap-2 mb-1.5">
+                          {m.usedWebSearch && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">🔍 Searched the web</span>
+                          )}
+                          {m.factsLearned > 0 && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">📝 Noted {m.factsLearned} fact{m.factsLearned > 1 ? 's' : ''}</span>
+                          )}
+                        </div>
+                      )}
+                      <div className="prose-chat">
+                        <ReactMarkdown>{m.text}</ReactMarkdown>
+                      </div>
+                    </>
                   ) : m.text}
                 </div>
               ))}
