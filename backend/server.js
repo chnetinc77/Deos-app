@@ -243,5 +243,50 @@ app.patch('/api/decisions/:id', async (req, res) => {
   }
 });
 
+const AI_ON_IT_URL = 'https://v0-vodo-ai-app.vercel.app';
+const AI_ON_IT_USER_ID = '1781756680827';
+const WORKOUT_LIST_ID = '1782765958454';
+const DEOS_LIST_ID = '1781772086425';
+
+app.post('/api/push-to-ai-on-it', async (req, res) => {
+  try {
+    const { title, domain } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+
+    const listId = domain === 'health' ? WORKOUT_LIST_ID : DEOS_LIST_ID;
+    const taskId = Date.now().toString() + Math.random();
+    const taskData = {
+      id: taskId,
+      title,
+      category: '',
+      categoryEmoji: '',
+      completed: false,
+      starred: false,
+      createdAt: new Date().toISOString(),
+      notes: 'Pushed from Deos',
+      dueDate: null,
+      priority: null,
+      label: '',
+      subtasks: []
+    };
+
+    const resp = await fetch(`${AI_ON_IT_URL}/api/db`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save_task',
+        userId: AI_ON_IT_USER_ID,
+        data: { id: taskId, listId, taskData }
+      })
+    });
+
+    const result = await resp.json();
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Deos backend running on port ${PORT}`));
