@@ -288,5 +288,47 @@ app.post('/api/push-to-ai-on-it', async (req, res) => {
   }
 });
 
+app.post('/api/log-exercise', async (req, res) => {
+  try {
+    const getRes = await fetch(`${AI_ON_IT_URL}/api/db`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get_habits', userId: AI_ON_IT_USER_ID })
+    });
+    const getData = await getRes.json();
+    const habits = getData.habits;
+
+    if (!habits) return res.status(404).json({ error: 'No habits found for user' });
+
+    const today = new Date().toISOString().split('T')[0];
+    let found = false;
+
+    const updated = habits.map(h => {
+      const isExercise = h.name.toLowerCase().includes('exercise') || h.icon === '💪';
+      if (isExercise) {
+        found = true;
+        if (!h.completedDates.includes(today)) {
+          return { ...h, completedDates: [...h.completedDates, today] };
+        }
+      }
+      return h;
+    });
+
+    if (!found) return res.status(404).json({ error: 'No Exercise habit found' });
+
+    const saveRes = await fetch(`${AI_ON_IT_URL}/api/db`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_habits', userId: AI_ON_IT_USER_ID, data: { habits: updated } })
+    });
+    const saveData = await saveRes.json();
+
+    res.json({ ok: true, alreadyLoggedToday: !found, result: saveData });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Deos backend running on port ${PORT}`));
