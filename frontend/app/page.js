@@ -59,7 +59,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center py-6 px-4">
-      <div className="w-full max-w-md flex flex-col" className2>
+      <div className="w-full max-w-md flex flex-col h-[100dvh] max-h-[100dvh] pb-4">
 
         <h1 className="text-lg font-medium mb-4 flex items-center gap-2 flex-shrink-0">
           <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-300 text-sm font-medium">D</span>
