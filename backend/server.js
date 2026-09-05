@@ -65,7 +65,7 @@ app.post('/api/chat', async (req, res) => {
       : 'No recent events.';
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: [
         {
@@ -121,6 +121,65 @@ app.get('/api/facts', async (req, res) => {
 app.delete('/api/facts/:id', async (req, res) => {
   await pool.query(`DELETE FROM user_facts WHERE id = $1`, [req.params.id]);
   res.json({ deleted: true });
+});
+
+app.post('/api/decisions', async (req, res) => {
+  try {
+    const { question, options } = req.body;
+    if (!question || !options) return res.status(400).json({ error: 'question and options are required' });
+    const { rows } = await pool.query(
+      `INSERT INTO decisions (question, options) VALUES ($1, $2) RETURNING *`,
+      [question, JSON.stringify(options)]
+    );
+    await pool.query(
+      `INSERT INTO events (event_type, raw_content) VALUES ('decision', $1)`,
+      [`Decision logged: ${question}`]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.get('/api/decisions', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM decisions ORDER BY created_at DESC`);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+app.patch('/api/decisions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { chosen, outcome_notes } = req.body;
+
+    if (chosen !== undefined) {
+      await pool.query(
+        `UPDATE decisions SET chosen = $1, decided_at = now() WHERE id = $2`,
+        [chosen, id]
+      );
+    }
+    if (outcome_notes !== undefined) {
+      await pool.query(
+        `UPDATE decisions SET outcome_notes = $1, outcome_reported_at = now() WHERE id = $2`,
+        [outcome_notes, id]
+      );
+      await pool.query(
+        `INSERT INTO events (event_type, raw_content) VALUES ('outcome', $1)`,
+        [`Outcome reported for decision ${id}: ${outcome_notes}`]
+      );
+    }
+
+    const { rows } = await pool.query(`SELECT * FROM decisions WHERE id = $1`, [id]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
