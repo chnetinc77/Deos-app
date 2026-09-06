@@ -22,6 +22,8 @@ export default function Home() {
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardData, setOnboardData] = useState({ age: '', nationality: '', gender: '', location: '', height: '', weight: '', occupation: '' });
 
   const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -30,9 +32,30 @@ export default function Home() {
       const res = await fetch(`${API}/api/facts`);
       const data = await res.json();
       setFacts(data);
+      if (data.length === 0 && !localStorage.getItem('onboarding-dismissed')) {
+        setShowOnboarding(true);
+      }
     } catch (err) {
       setFacts([]);
     }
+  };
+
+  const submitOnboarding = async () => {
+    try {
+      await fetch(`${API}/api/onboarding`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(onboardData)
+      });
+      localStorage.setItem('onboarding-dismissed', 'true');
+      setShowOnboarding(false);
+      loadFacts();
+    } catch (err) {}
+  };
+
+  const skipOnboarding = () => {
+    localStorage.setItem('onboarding-dismissed', 'true');
+    setShowOnboarding(false);
   };
 
   const loadDecisions = async () => {
@@ -172,6 +195,38 @@ export default function Home() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
+
+        {showOnboarding && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-xl p-4 max-h-[85vh] overflow-y-auto">
+              <h2 className="text-base font-medium mb-1">Tell Deos about yourself</h2>
+              <p className="text-xs text-neutral-500 mb-4">Optional, but helps Deos give grounded advice from day one.</p>
+
+              {[
+                { key: 'age', placeholder: 'Age' },
+                { key: 'nationality', placeholder: 'Nationality' },
+                { key: 'gender', placeholder: 'Gender' },
+                { key: 'location', placeholder: 'Where are you based?' },
+                { key: 'height', placeholder: 'Height' },
+                { key: 'weight', placeholder: 'Weight' },
+                { key: 'occupation', placeholder: 'Occupation' }
+              ].map(field => (
+                <input
+                  key={field.key}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-md px-3 py-2 text-sm outline-none mb-2 placeholder-neutral-600"
+                  placeholder={field.placeholder}
+                  value={onboardData[field.key]}
+                  onChange={e => setOnboardData(prev => ({ ...prev, [field.key]: e.target.value }))}
+                />
+              ))}
+
+              <div className="flex gap-2 mt-3">
+                <button onClick={skipOnboarding} className="flex-1 text-sm px-3 py-2 rounded-md bg-neutral-800 text-neutral-400">Skip</button>
+                <button onClick={submitOnboarding} className="flex-1 text-sm px-3 py-2 rounded-md bg-indigo-500/20 text-indigo-300">Save</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {sidebarOpen && (
           <div className="fixed inset-0 z-50 flex">
