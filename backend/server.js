@@ -382,5 +382,38 @@ app.post('/api/log-exercise', async (req, res) => {
   }
 });
 
+app.post('/api/onboarding', async (req, res) => {
+  try {
+    const { age, nationality, gender, location, height, weight, occupation } = req.body;
+
+    const fields = [
+      { value: age, content: v => `Age: ${v}`, domain: 'general' },
+      { value: nationality, content: v => `Nationality: ${v}`, domain: 'general' },
+      { value: gender, content: v => `Gender: ${v}`, domain: 'general' },
+      { value: location, content: v => `Based in: ${v}`, domain: 'general' },
+      { value: height, content: v => `Height: ${v}`, domain: 'health' },
+      { value: weight, content: v => `Weight: ${v}`, domain: 'health' },
+      { value: occupation, content: v => `Occupation: ${v}`, domain: 'career' }
+    ];
+
+    const insertedIds = [];
+    for (const field of fields) {
+      if (field.value && String(field.value).trim()) {
+        const { rows } = await pool.query(
+          `INSERT INTO user_facts (category, content, confidence, domain)
+           VALUES ('identity', $1, 1.0, $2) RETURNING id`,
+          [field.content(field.value.trim()), field.domain]
+        );
+        insertedIds.push(rows[0].id);
+      }
+    }
+
+    res.json({ ok: true, factsAdded: insertedIds.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Deos backend running on port ${PORT}`));
