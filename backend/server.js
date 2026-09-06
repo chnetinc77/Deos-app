@@ -105,27 +105,90 @@ app.post('/api/chat', async (req, res) => {
       ? recentEvents.map(e => `[${e.event_type}] ${e.raw_content}`).join('\n')
       : 'No recent events.';
 
-    const response = await anthropic.messages.create({
+    const systemPrompt = [
+      {
+        type: 'text',
+        text: `You are Deos, a personal cognitive assistant that has been learning about this specific user over time. Use what you know about them to give grounded, specific responses that reference their actual history, goals, and patterns - not generic advice. Never make the decision for them; surface relevant context and let them decide. When recording facts, classify each one into a domain: health, finance, network (relationships/people), career, or general.
+
+You have web search available. For any decision involving money, business, investment, relocation, or legal/regulatory exposure, you must proactively research relevant real-world factors even if the user did not ask you to - including but not limited to: rule of law and legal system reliability in the relevant country or jurisdiction, market conditions, regulatory environment, corruption indices, ease of doing business, staffing and labor market realities, and any other material risk. Do not wait to be asked about risk factors - surface them unprompted if your research uncovers something materially relevant to the decision, even if it contradicts the premise the user seems to be operating under. Cite what you found.\n\nWhat you currently know about this user:\n${selfModel}`,
+        cache_control: { type: 'ephemeral' }
+      }
+    ];
+
+    let messages = [
+      { role: 'user', content: `Recent context:\n${eventContext}\n\nUser message: ${message}` }
+    ];
+
+    const toolDefs = [FACT_TOOL, { type: 'web_search_20250305', name: 'web_search' }];
+
+    let response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
-      system: [
-        {
-          type: 'text',
-          text: `You are Deos, a personal cognitive assistant that has been learning about this specific user over time. Use what you know about them to give grounded, specific responses that reference their actual history, goals, and patterns — not generic advice. Never make the decision for them; surface relevant context and let them decide. When recording facts, classify each one into a domain: health, finance, network (relationships/people), career, or general.
-
-You have web search available. For any decision involving money, business, investment, relocation, or legal/regulatory exposure, you must proactively research relevant real-world factors even if the user did not ask you to — including but not limited to: rule of law and legal system reliability in the relevant country or jurisdiction, market conditions, regulatory environment, corruption indices, ease of doing business, staffing and labor market realities, and any other material risk. Do not wait to be asked about risk factors — surface them unprompted if your research uncovers something materially relevant to the decision, even if it contradicts the premise the user seems to be operating under. Cite what you found.\n\nWhat you currently know about this user:\n${selfModel}`,
-          cache_control: { type: 'ephemeral' }
-        }
-      ],
-      messages: [
-        { role: 'user', content: `Recent context:\n${eventContext}\n\nUser message: ${message}` }
-      ],
-      tools: [FACT_TOOL, { type: 'web_search_20250305', name: 'web_search' }]
+      system: systemPrompt,
+      messages,
+      tools: toolDefs
     });
 
+    let usedWebSearch = response.content.some(b => b.type === 'server_tool_use' || b.type === 'web_search_tool_result');
+
+    const eventResult = await pool.query(
+      `INSERT INTO events (event_type, raw_content) VALUES ('chat', $1) RETURNING id`,
+      [message]
+    );
+    const eventId = eventResult.rows[0].id;
+
+    let newFactIds = [];
+    let loopCount = 0;
+
+    while (response.stop_reason === 'tool_use' && loopCount < 5) {
+      loopCount++;
+      const clientToolUses = response.content.filter(b => b.type === 'tool_use' && b.name === 'record_facts');
+      if (clientToolUses.length === 0) break;
+
+      const toolResultBlocks = [];
+      for (const toolBlock of clientToolUses) {
+        if (toolBlock.input && toolBlock.input.facts) {
+          for (const fact of toolBlock.input.facts) {
+            const { rows } = await pool.query(
+              `INSERT INTO user_facts (category, content, confidence, source_event_id, domain)
+               VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+              [fact.category, fact.content, fact.confidence, eventId, fact.domain || 'general']
+            );
+            newFactIds.push(rows[0].id);
+          }
+        }
+        toolResultBlocks.push({
+          type: 'tool_result',
+          tool_use_id: toolBlock.id,
+          content: 'Facts recorded.'
+        });
+      }
+
+      messages = [
+        ...messages,
+        { role: 'assistant', content: response.content },
+        { role: 'user', content: toolResultBlocks }
+      ];
+
+      response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages,
+        tools: toolDefs
+      });
+
+      if (response.content.some(b => b.type === 'server_tool_use' || b.type === 'web_search_tool_result')) {
+        usedWebSearch = true;
+      }
+    }
+
+    if (newFactIds.length > 0) {
+      await pool.query(`UPDATE events SET extracted_fact_ids = $1 WHERE id = $2`, [newFactIds, eventId]);
+    }
+
     const textBlocks = response.content.filter(b => b.type === 'text');
-    const toolBlock = response.content.find(b => b.type === 'tool_use' && b.name === 'record_facts');
-    const replyText = textBlocks.length > 0 ? textBlocks.map(b => b.text).join('\n\n') : "Got it — noted.";
+    const replyText = textBlocks.length > 0 ? textBlocks.map(b => b.text).join('\n\n') : "Got it - noted.";
 
     let convId = conversationId;
     if (!convId) {
@@ -147,26 +210,6 @@ You have web search available. For any decision involving money, business, inves
     );
     await pool.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [convId]);
 
-    const eventResult = await pool.query(
-      `INSERT INTO events (event_type, raw_content) VALUES ('chat', $1) RETURNING id`,
-      [message]
-    );
-    const eventId = eventResult.rows[0].id;
-
-    let newFactIds = [];
-    if (toolBlock && toolBlock.input.facts) {
-      for (const fact of toolBlock.input.facts) {
-        const { rows } = await pool.query(
-          `INSERT INTO user_facts (category, content, confidence, source_event_id, domain)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [fact.category, fact.content, fact.confidence, eventId, fact.domain || 'general']
-        );
-        newFactIds.push(rows[0].id);
-      }
-      await pool.query(`UPDATE events SET extracted_fact_ids = $1 WHERE id = $2`, [newFactIds, eventId]);
-    }
-
-    const usedWebSearch = response.content.some(b => b.type === 'server_tool_use' || b.type === 'web_search_tool_result');
     res.json({ reply: replyText, factsLearned: newFactIds.length, conversationId: convId, usedWebSearch });
   } catch (err) {
     console.error(err);
